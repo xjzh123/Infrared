@@ -1,5 +1,8 @@
 //bomberfish
 
+import { Hono } from 'hono';
+import { serveStatic } from 'hono/cloudflare-workers'
+
 var packageJson = require('../package.json');
 class KVAdapter {
 	ns;
@@ -799,6 +802,10 @@ class Server extends EventTarget {
 		};
 	}
 
+	/**
+	 * @param {Request} request
+	 * @returns {Response}
+	 */
 	async routeRequest(request) {
 		console.log('Routing a request!')
 		const service = new URL(request.url).pathname.slice(this.directory.length - 1);
@@ -1754,7 +1761,7 @@ function createBareServer(directory, init = {}) {
 
 let kvNS = BARE
 const kvDB = new KVAdapter(kvNS)
-const bareServer = createBareServer('/', {
+const bareServer = createBareServer('/bare-server/', {
 	logErrors: true,
 	database: kvDB,
 	maintainer: {
@@ -1763,11 +1770,17 @@ const bareServer = createBareServer('/', {
 	}
 });
 
-addEventListener('fetch', event => {
+const app = new Hono();
+
+app.use(async (c, next) => {
 	cleanupDatabase(kvDB);
-	if (bareServer.shouldRoute(event.request)) {
-		event.respondWith(
-			bareServer.routeRequest(event.request)
-		);
-	}
+	await next();
+})
+
+app.all('/bare-server', (c) => {
+	return bareServer.routeRequest(c.req);
 });
+
+app.get('*', serveStatic({ root: './Infrared-Frontend' }));
+
+export default app;
