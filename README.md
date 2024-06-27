@@ -37,7 +37,7 @@ Then create a KV database namespace named `BARE`:
 npx wrangler kv namespace create BARE
 ```
 
-After this, edit wrangler.toml to use your own KV namespace.
+After this, edit `wrangler.toml` to use your own KV namespace.
 
 Finally, you can deploy to cloudflare.
 
