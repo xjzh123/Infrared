@@ -2,6 +2,7 @@
 
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/cloudflare-workers'
+import manifest from '__STATIC_CONTENT_MANIFEST'
 
 var packageJson = require('../package.json');
 class KVAdapter {
@@ -817,6 +818,8 @@ class Server extends EventTarget {
 				response = new Response(undefined, {
 					status: 200
 				});
+			} else if (service === '') {
+				return Response.redirect(new URL(this.directory, request.url))
 			} else if (service === '/') {
 				response = json(200, this.instanceInfo);
 			} else if (!isSocket && this.routes.has(service)) {
@@ -1758,29 +1761,39 @@ function createBareServer(directory, init = {}) {
 	});
 	return server;
 }
-
-let kvNS = BARE
-const kvDB = new KVAdapter(kvNS)
-const bareServer = createBareServer('/bare-server/', {
-	logErrors: true,
-	database: kvDB,
-	maintainer: {
-		email: 'hariz@bomberfish.ca',
-		website: 'https://bomberfish.ca'
-	}
-});
-
 const app = new Hono();
 
-app.use(async (c, next) => {
-	cleanupDatabase(kvDB);
-	await next();
-})
+let kvNS;
+/**
+ * @type {KVAdapter}
+ */
+let kvDB;
+/**
+ * @type {Server}
+ */
+let bareServer;
 
-app.all('/bare-server', (c) => {
-	return bareServer.routeRequest(c.req);
+const bareServerPath = 'backend'
+
+app.all(`/${bareServerPath}/*`, (c) => {
+	if (kvNS === undefined) {
+		kvNS = c.env.BARE;
+		kvDB = new KVAdapter(kvNS);
+		bareServer = createBareServer(`/${bareServerPath}/`, {
+			logErrors: true,
+			database: kvDB,
+			maintainer: {
+				email: 'hariz@bomberfish.ca',
+				website: 'https://bomberfish.ca'
+			}
+		});
+	}
+
+	cleanupDatabase(kvDB);
+
+	return bareServer.routeRequest(c.req.raw);
 });
 
-app.get('*', serveStatic({ root: './Infrared-Frontend' }));
+app.get('*', serveStatic({ root: '/', manifest }));
 
 export default app;
